@@ -285,7 +285,7 @@ class TensorSpec(DenseSpec, type_spec.BatchableTypeSpec,
     return result
 
   def _to_tensors(self, value):
-    assert isinstance(value, ops.Tensor)
+    assert isinstance(value, ops.Tensor), value
     return [value]
 
   def _cast(self, value, casting_context):
@@ -404,6 +404,7 @@ class TensorSpec(DenseSpec, type_spec.BatchableTypeSpec,
       return TensorSpec(self.shape, self.dtype)
 
 trace_type.register_serializable(TensorSpec)
+trace_type.register_tensor_type(TensorSpec)
 
 
 class _TensorSpecCodec:

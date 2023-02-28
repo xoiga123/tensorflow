@@ -35,6 +35,7 @@ from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import tensor_util
 from tensorflow.python.framework import type_spec
 from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import array_ops_stack
 from tensorflow.python.ops import control_flow_util as util
 from tensorflow.python.ops import gen_array_ops
 from tensorflow.python.ops import gen_control_flow_ops
@@ -1067,9 +1068,6 @@ def _eager_cond_implementation(pred, true_fn, false_fn, strict, name):
         or not isinstance(false_fn, def_function.Function)):
       raise TypeError("When running tf.cond on a parallel device, 'true_fn' "
                       "and 'false_fn' must be decorated with `tf.function`.")
-    @def_function.function
-    def _parallel_device_cond_wrapper():
-      return cond_v2.cond_v2(pred, true_fn, false_fn, name)
     functions_run_eagerly = def_function.functions_run_eagerly()
     if functions_run_eagerly:
       # We need to use tf.function to deal with variable creation inside the
@@ -1081,7 +1079,7 @@ def _eager_cond_implementation(pred, true_fn, false_fn, strict, name):
           "tf.function to work. This primitive will override the disable.")
     def_function.run_functions_eagerly(False)
     try:
-      return _parallel_device_cond_wrapper()
+      return cond_v2.cond_v2(pred, true_fn, false_fn, name)
     finally:
       if functions_run_eagerly is not None:
         def_function.run_functions_eagerly(functions_run_eagerly)
@@ -3178,7 +3176,7 @@ def _assert_at_most_n_true(predicates, n, msg):
     n: maximum number of true predicates allowed.
     msg: Error message.
   """
-  preds_c = array_ops.stack(predicates, name="preds_c")
+  preds_c = array_ops_stack.stack(predicates, name="preds_c")
   num_true_conditions = math_ops.reduce_sum(
       math_ops.cast(preds_c, dtypes.int32), name="num_true_conds")
   condition = math_ops.less_equal(num_true_conditions,
@@ -3214,7 +3212,7 @@ def _case_create_default_action(predicates, actions):
                   "predicates are True: " % k)
     default_msg = ("Input error: "
                    "None of conditions evaluated as True:",
-                   array_ops.stack(predicates, name="preds_c"))
+                   array_ops_stack.stack(predicates, name="preds_c"))
     with ops.control_dependencies([
         _assert_at_most_n_true(other_predicates, n=0, msg=others_msg),
         Assert(predicate, data=default_msg)

@@ -36,18 +36,27 @@ void addCPUTilingPipeline(OpPassManager& pm,
                           const GmlStCPUTilingOptions& options) {
   using func::FuncOp;
 
+  if (options.enableFusionClusters) {
+    pm.addNestedPass<FuncOp>(createFusionPlanningForCpuPass());
+  }
+
   pm.addNestedPass<FuncOp>(createTransformScatterForCpuPass());
   pm.addNestedPass<FuncOp>(createTransformReduceForCpuPass(
       options.vectorSize, options.reduction1DTileSize,
       options.reduction2DTileSizes));
-  pm.addNestedPass<FuncOp>(createTransformDotForCpuPass());
+  pm.addNestedPass<FuncOp>(
+      createTransformDotForCpuPass(options.matmulTileSizes));
   pm.addNestedPass<FuncOp>(createTransformMatmulForCpuPass(
       options.matmulTileSizes, options.lowerToMmt4d));
+  // TODO(b/270534416): Re-enable.
+  // pm.addNestedPass<FuncOp>(createTransformGenericForCpuPass());
   pm.addNestedPass<FuncOp>(createTransformTransposeForCpuPass());
   pm.addNestedPass<FuncOp>(createTransformMapForCpuPass(options.vectorSize));
   pm.addNestedPass<FuncOp>(createTransformSortForCpuPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::gml_st::createTransformReverseForCpuPass());
+
+  pm.addNestedPass<FuncOp>(createInlineFusionClustersPass());
 
   pm.addPass(createCSEPass());
   pm.addPass(createCanonicalizerPass());
@@ -58,8 +67,6 @@ void addCPUTilingPipeline(OpPassManager& pm,
   // Tile remaining ops by size one and scalarize what we can.
   pm.addNestedPass<FuncOp>(createTileByOnePass());
   pm.addNestedPass<FuncOp>(createScalarizationPass());
-
-  pm.addNestedPass<FuncOp>(createRewriteVectorContractPass());
 }
 
 void addDefaultCPUTilingPipeline(OpPassManager& pm) {

@@ -120,10 +120,12 @@ struct ExecutionFunctions {
 };
 
 struct DTensorOperation {
-  // For both fields: not owned. lifetime covers the whole usage.
+  // For all fields: not owned. lifetime covers the whole usage.
   const char* name;
   const FunctionDef* function_def;
-
+  // Default mesh is used when Mesh Propagation does not identify a mesh
+  // otherwise.
+  const Mesh& default_mesh;
   inline bool is_func() const { return function_def != nullptr; }
 };
 
@@ -501,8 +503,7 @@ class ExecutableManager {
   ExecutableManager() = default;
 
   // Caches the executable with ParallelExecutable.
-  const T* AddCachedExecutable(const DTensorOperation& op,
-                               tensorflow::Fprint128 cache_key, T executable);
+  const T* AddCachedExecutable(tensorflow::Fprint128 cache_key, T executable);
 
   // Returns the cache key and the cached lowered executable for the function.
   // Returns a nullptr for the lowered executable if there is a cache miss.
@@ -602,6 +603,7 @@ Status InsertFunctionForTPUEmbeddingCheckpoint(
 // - op name and attr
 // - input shapes and layouts
 // - default layout of outputs.
+// - default mesh.
 // - values of constant foldable inputs.
 template <typename T>
 tensorflow::Fprint128 ExecutableManager<T>::CacheKeyForGraph(
@@ -613,6 +615,9 @@ tensorflow::Fprint128 ExecutableManager<T>::CacheKeyForGraph(
   SerializeToStringDeterministic(attributes, &serialized);
   cache_key =
       FingerprintCat128(cache_key, tensorflow::Fingerprint128(serialized));
+  cache_key = FingerprintCat128(
+      cache_key,
+      tensorflow::Fingerprint128(doperation.default_mesh.ToString()));
   // Higher level cache based on operation name and input shapes.
   for (int i = 0; i < inputs.size(); ++i) {
     if (!IsConstantFoldable(doperation, i) &&
@@ -709,7 +714,7 @@ const T* ExecutableManager<T>::GetCachedExecutableSimple(
 
 template <typename T>
 const T* ExecutableManager<T>::AddCachedExecutable(
-    const DTensorOperation& op, tensorflow::Fprint128 cache_key, T executable) {
+    tensorflow::Fprint128 cache_key, T executable) {
   return &function_cache_.insert({cache_key, std::move(executable)})
               .first->second;
 }
